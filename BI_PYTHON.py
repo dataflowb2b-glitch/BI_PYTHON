@@ -54,7 +54,6 @@ response = supabase.table("vw_contas_movimento").select("*").execute()
 data = response.data
 df = pd.DataFrame(data)
 
-# Renomear fornecedor para filial
 if "fornecedor" in df.columns:
     df = df.rename(columns={"fornecedor": "filial"})
 
@@ -80,6 +79,9 @@ df['mes'] = df['dt_lancamento'].dt.month
 df['nome_mes'] = df['mes'].map(meses)
 df['mes_ano'] = df['dt_lancamento'].dt.to_period('M').astype(str)
 
+ordem_meses = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho",
+               "Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"]
+
 # ==============================
 # FILTROS INTERATIVOS ACIMA DOS CARDS
 # ==============================
@@ -87,7 +89,6 @@ df['mes_ano'] = df['dt_lancamento'].dt.to_period('M').astype(str)
 st.subheader("📋 Filtros")
 col_data1,col_data2 = st.columns(2)
 ano_sel = col_data1.multiselect("Ano", sorted(df["ano"].dropna().unique()), key="ano")
-ordem_meses = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"]
 mes_sel = col_data2.multiselect("Mês", sorted(df["nome_mes"].dropna().unique(), key=lambda x: ordem_meses.index(x)), key="mes")
 
 col_f1,col_f2,col_f3,col_f4,col_f5,col_f6 = st.columns(6)
@@ -137,30 +138,34 @@ cor_res = "#16a34a" if resultado_filtrado>=0 else "#dc2626"
 col3.markdown(f"""<div class="card"><div class="card-title">📊 Resultado</div><div class="card-value" style="color:{cor_res};">{formatar_real(resultado_filtrado)}</div></div>""", unsafe_allow_html=True)
 
 # ==============================
-# SEÇÕES EM EXPANDERS
+# TABS
 # ==============================
 
-with st.expander("📅 Valores por Mês/Ano"):
-    df_mes_ano = df_filtrado.groupby(['mes_ano','movimento'])['valor'].sum().unstack(fill_value=0)
-    df_mes_ano['Receita'] = df_mes_ano.get('Receita',0)
-    df_mes_ano['Despesa'] = df_mes_ano.get('Despesa',0)
-    df_mes_ano['Resultado'] = df_mes_ano['Receita'] + df_mes_ano['Despesa']
-    st.dataframe(df_mes_ano.style.format(formatar_real).applymap(colorir_valor), use_container_width=True)
+tab1, tab2 = st.tabs(["📊 Dashboard Principal","📈 Média de Despesas"])
 
-with st.expander("📂 Visão Detalhada"):
-    df_detalhe = df_filtrado.groupby(['razao','grupo','filial','ano','nome_mes','tipo_conta','pcontas','movimento'], dropna=False)['valor'].sum().unstack(fill_value=0).reset_index()
-    for col in ["Receita","Despesa"]:
-        if col not in df_detalhe.columns: df_detalhe[col]=0
-    st.dataframe(df_detalhe.style.format({"Receita":formatar_real,"Despesa":formatar_real}).applymap(colorir_valor, subset=["Receita","Despesa"]), use_container_width=True)
+with tab1:
+    with st.expander("📅 Valores por Mês/Ano"):
+        df_mes_ano = df_filtrado.groupby(['mes_ano','movimento'])['valor'].sum().unstack(fill_value=0)
+        df_mes_ano['Receita'] = df_mes_ano.get('Receita',0)
+        df_mes_ano['Despesa'] = df_mes_ano.get('Despesa',0)
+        df_mes_ano['Resultado'] = df_mes_ano['Receita'] + df_mes_ano['Despesa']
+        st.dataframe(df_mes_ano.style.format(formatar_real).applymap(colorir_valor), use_container_width=True)
 
-with st.expander("📂 Despesas Mês a Mês"):
-    df_despesas = df_filtrado[df_filtrado["movimento"]=="Despesa"].copy()
-    df_despesas_pivot = pd.pivot_table(df_despesas,index=['razao','grupo','filial','tipo_conta','pcontas'],columns='nome_mes',values='valor',aggfunc='sum',fill_value=0)
-    meses_existentes = [m for m in ordem_meses if m in df_despesas_pivot.columns]
-    df_despesas_pivot = df_despesas_pivot[meses_existentes].reset_index()
-    st.dataframe(df_despesas_pivot.style.format({mes:formatar_real for mes in meses_existentes}).applymap(colorir_valor, subset=meses_existentes), use_container_width=True)
+    with st.expander("📂 Visão Detalhada"):
+        df_detalhe = df_filtrado.groupby(['razao','grupo','filial','ano','nome_mes','tipo_conta','pcontas','movimento'], dropna=False)['valor'].sum().unstack(fill_value=0).reset_index()
+        for col in ["Receita","Despesa"]:
+            if col not in df_detalhe.columns: df_detalhe[col]=0
+        st.dataframe(df_detalhe.style.format({"Receita":formatar_real,"Despesa":formatar_real}).applymap(colorir_valor, subset=["Receita","Despesa"]), use_container_width=True)
 
-with st.expander("📊 Média de Despesas"):
+    with st.expander("📂 Despesas Mês a Mês"):
+        df_despesas = df_filtrado[df_filtrado["movimento"]=="Despesa"].copy()
+        df_despesas_pivot = pd.pivot_table(df_despesas,index=['razao','grupo','filial','tipo_conta','pcontas'],columns='nome_mes',values='valor',aggfunc='sum',fill_value=0)
+        meses_existentes = [m for m in ordem_meses if m in df_despesas_pivot.columns]
+        df_despesas_pivot = df_despesas_pivot[meses_existentes].reset_index()
+        st.dataframe(df_despesas_pivot.style.format({mes:formatar_real for mes in meses_existentes}).applymap(colorir_valor, subset=meses_existentes), use_container_width=True)
+
+with tab2:
+    st.subheader("📊 Média de Despesas (Filtrada)")
     df_media_despesas = df_filtrado[df_filtrado["movimento"]=="Despesa"].copy()
     if not df_media_despesas.empty:
         df_media = df_media_despesas.groupby(['razao','grupo','filial','tipo_conta','pcontas'])['valor'].mean().reset_index()
