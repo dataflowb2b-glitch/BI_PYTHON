@@ -1,4 +1,4 @@
-supabase-py
-streamlit
+streamlit>=1.22.0
 pandas
-pillow
+Pillow
+supabase
