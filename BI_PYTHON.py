@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 from supabase import create_client
+
 from PIL import Image
 
 # ==============================
@@ -150,7 +151,8 @@ if 'Despesa' not in grouped_mensal.columns:
 grouped_mensal['Resultado'] = grouped_mensal['Receita'] + grouped_mensal['Despesa']
 
 st.subheader("📅 Valores por Mês/Ano")
-st.dataframe(grouped_mensal, use_container_width=True)
+styled = grouped_mensal.style.format(formatar_real).applymap(colorir_valor)
+st.dataframe(styled, use_container_width=True)
 
 # ==============================
 # FILTROS INTERATIVOS
