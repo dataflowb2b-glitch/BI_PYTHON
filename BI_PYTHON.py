@@ -3,6 +3,85 @@ import pandas as pd
 from supabase import create_client
 from PIL import Image
 from st_aggrid import AgGrid, GridOptionsBuilder, JsCode
+from datetime import datetime
+
+# ==============================
+# INICIO TITULO DA PAGINA
+# ==============================
+
+st.set_page_config(
+    page_title="BI Financeiro",
+    page_icon="📊",
+    layout="wide"
+)
+
+data_atual = datetime.now().strftime("%d/%m/%Y")
+
+# 🔹 CSS + Barra Fixa
+st.markdown(f"""
+<style>
+
+/* Remove menu padrão */
+#MainMenu {{visibility: hidden;}}
+footer {{visibility: hidden;}}
+header {{visibility: hidden;}}
+
+/* Fundo geral */
+.main {{
+    background-color: #f5f7fa;
+}}
+
+/* Barra superior fixa */
+.topbar {{
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 70px;
+    background-color: white;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 40px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    z-index: 9999;
+}}
+
+/* Espaço para compensar barra fixa */
+.block-container {{
+    padding-top: 90px;
+}}
+
+.title {{
+    font-size: 20px;
+    font-weight: 600;
+}}
+
+.date {{
+    font-size: 14px;
+    color: gray;
+}}
+
+</style>
+
+<div class="topbar">
+    <div style="display:flex; align-items:center; gap:15px;">
+        <img src="https://raw.githubusercontent.com/dataflowb2b-glitch/BI_PYTHON/main/LOGO%20NOVA%20DAS%20NOVAS.jpeg" width="140">
+        <div class="title">📊GESTÃO DE RESULTADO FINANCEIRO</div>
+    </div>
+    <div class="date">Atualizado em {data_atual}</div>
+</div>
+
+""", unsafe_allow_html=True)
+
+
+# ==============================
+#FIM TITULO DA PAGINA
+# ==============================
+
+
+
+
 
 # ==============================
 # FUNÇÕES
