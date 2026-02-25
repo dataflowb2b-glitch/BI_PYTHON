@@ -138,52 +138,80 @@ tab1, tab2, tab3 = st.tabs(["📊 Dashboard Principal","📈 Média de Despesas"
 
 with tab1:
 
+    with tab1:
     with st.expander("📅 Valores por Mês/Ano"):
-        df_mes_ano = df_filtrado.groupby(['mes_ano','movimento'])['valor'].sum().unstack(fill_value=0)
-        df_mes_ano['Receita'] = df_mes_ano.get('Receita',0)
-        df_mes_ano['Despesa'] = df_mes_ano.get('Despesa',0)
+        df_mes_ano = df_filtrado.groupby(['mes_ano', 'movimento'])['valor'].sum().unstack(fill_value=0)
+        df_mes_ano['Receita'] = df_mes_ano.get('Receita', 0)
+        df_mes_ano['Despesa'] = df_mes_ano.get('Despesa', 0)
         df_mes_ano['Resultado'] = df_mes_ano['Receita'] + df_mes_ano['Despesa']
 
-        df_exibicao = df_mes_ano.copy()
-        for col in df_exibicao.columns:
-            df_exibicao[col] = df_exibicao[col].apply(formatar_real)
 
-        st.data_editor(df_exibicao, use_container_width=True, disabled=True)
+        def colorir_valores(val, coluna):
+            if coluna == "Receita":
+                return "color: green" if val > 0 else "color: black"
+            elif coluna == "Despesa":
+                return "color: red" if val < 0 else "color: black"
+            elif coluna == "Resultado":
+                return "color: green" if val > 0 else "color: red"
+            return ""
+
+
+        df_estilizado = df_mes_ano.style
+
+        for col in df_mes_ano.columns:
+            df_estilizado = df_estilizado.map(
+                lambda v, c=col: colorir_valores(v, c),
+                subset=[col]
+            )
+
+        # Formatar para Real
+        df_estilizado = df_estilizado.format(formatar_real)
+
+        st.dataframe(df_estilizado, use_container_width=True)
 
     with st.expander("📂 Visão Detalhada"):
         df_detalhe = df_filtrado.groupby(
-            ['razao','grupo','filial','ano','nome_mes','tipo_conta','pcontas','movimento'],
+            ['razao', 'grupo', 'filial', 'ano', 'nome_mes', 'tipo_conta', 'pcontas', 'movimento'],
             dropna=False
         )['valor'].sum().unstack(fill_value=0).reset_index()
 
-        for col in ["Receita","Despesa"]:
+        # Garantir que as colunas existam
+        for col in ["Receita", "Despesa"]:
             if col not in df_detalhe.columns:
                 df_detalhe[col] = 0
 
-        df_detalhe["Receita"] = df_detalhe["Receita"].apply(formatar_real)
-        df_detalhe["Despesa"] = df_detalhe["Despesa"].apply(formatar_real)
+        # Criar Resultado (opcional, mas recomendo manter padrão)
+        df_detalhe["Resultado"] = df_detalhe["Receita"] + df_detalhe["Despesa"]
 
-        st.data_editor(df_detalhe, use_container_width=True, disabled=True)
 
-    with st.expander("📂 Despesas Mês a Mês"):
-        df_despesas = df_filtrado[df_filtrado["movimento"]=="Despesa"].copy()
+        def cor_texto(valor, coluna):
+            if coluna == "Receita":
+                return "color: green;" if valor > 0 else ""
+            elif coluna == "Despesa":
+                return "color: red;" if valor < 0 else ""
+            elif coluna == "Resultado":
+                if valor > 0:
+                    return "color: green; font-weight: bold;"
+                elif valor < 0:
+                    return "color: red; font-weight: bold;"
+            return ""
 
-        df_despesas_pivot = pd.pivot_table(
-            df_despesas,
-            index=['razao','grupo','filial','tipo_conta','pcontas'],
-            columns='nome_mes',
-            values='valor',
-            aggfunc='sum',
-            fill_value=0
-        )
 
-        meses_existentes = [m for m in ordem_meses if m in df_despesas_pivot.columns]
-        df_despesas_pivot = df_despesas_pivot[meses_existentes].reset_index()
+        styled = df_detalhe.style
 
-        for mes in meses_existentes:
-            df_despesas_pivot[mes] = df_despesas_pivot[mes].apply(formatar_real)
+        for col in ["Receita", "Despesa", "Resultado"]:
+            styled = styled.map(
+                lambda v, c=col: cor_texto(v, c),
+                subset=[col]
+            )
 
-        st.data_editor(df_despesas_pivot, use_container_width=True, disabled=True)
+        styled = styled.format({
+            "Receita": formatar_real,
+            "Despesa": formatar_real,
+            "Resultado": formatar_real
+        })
+
+        st.dataframe(styled, use_container_width=True)
 
 with tab2:
 
