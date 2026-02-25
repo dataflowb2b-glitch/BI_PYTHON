@@ -32,12 +32,7 @@ st.set_page_config(layout="wide")
 st.markdown("""
 <style>
 .stApp { background-color: #f5f7fa; }
-.card {
-    background-color: white;
-    padding: 20px;
-    border-radius: 14px;
-    box-shadow: 0px 4px 10px rgba(0,0,0,0.08);
-}
+.card { background-color: white; padding: 20px; border-radius: 14px; box-shadow: 0px 4px 10px rgba(0,0,0,0.08);}
 .card-title { font-size:16px; color:gray; margin-bottom:8px; }
 .card-value { font-size:42px; font-weight:700; }
 </style>
@@ -51,8 +46,7 @@ st.title("📊 Dashboard Financeiro - CBR")
 # ==============================
 
 response = supabase.table("vw_contas_movimento").select("*").execute()
-data = response.data
-df = pd.DataFrame(data)
+df = pd.DataFrame(response.data)
 
 if "fornecedor" in df.columns:
     df = df.rename(columns={"fornecedor": "filial"})
@@ -141,7 +135,7 @@ col3.markdown(f"""<div class="card"><div class="card-title">📊 Resultado</div>
 # TABS
 # ==============================
 
-tab1, tab2 = st.tabs(["📊 Dashboard Principal","📈 Média de Despesas"])
+tab1, tab2, tab3 = st.tabs(["📊 Dashboard Principal","📈 Média de Despesas","📊 DRE Mensal"])
 
 with tab1:
     with st.expander("📅 Valores por Mês/Ano"):
@@ -173,3 +167,14 @@ with tab2:
         st.dataframe(df_media.style.format({"Média Despesa":formatar_real}).applymap(colorir_valor, subset=["Média Despesa"]), use_container_width=True)
     else:
         st.warning("Nenhuma despesa encontrada para os filtros selecionados.")
+
+with tab3:
+    st.subheader("📊 DRE Mensal (Receita x Despesa x Resultado)")
+    df_dre = pd.pivot_table(df_filtrado, index='movimento', columns='nome_mes', values='valor', aggfunc='sum', fill_value=0)
+    # Adicionar Resultado = Receita - Despesa
+    if "Receita" in df_dre.index and "Despesa" in df_dre.index:
+        df_dre.loc["Resultado"] = df_dre.loc["Receita"] + df_dre.loc["Despesa"]
+    meses_existentes = [m for m in ordem_meses if m in df_dre.columns]
+    df_dre = df_dre[meses_existentes].reset_index()
+    st.dataframe(df_dre.style.format({m:formatar_real for m in meses_existentes}).applymap(colorir_valor, subset=meses_existentes), use_container_width=True)
+    st.line_chart(df_dre.set_index('movimento')[meses_existentes].T)
