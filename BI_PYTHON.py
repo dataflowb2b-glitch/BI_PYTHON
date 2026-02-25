@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 from supabase import create_client
 from PIL import Image
-
+from st_aggrid import JsCode
 
 # ==============================
 # FUNÇÕES
