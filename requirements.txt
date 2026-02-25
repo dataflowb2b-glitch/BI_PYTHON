@@ -3,3 +3,4 @@ pandas
 Pillow
 supabase
 streamlit-aggrid
+streamlit-aggrid==0.3.4
