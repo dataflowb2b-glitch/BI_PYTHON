@@ -288,22 +288,133 @@ with tab1:
 
 with tab2:
 
-    st.subheader("📊 Média de Despesas (Filtrada)")
-    df_media_despesas = df_filtrado[df_filtrado["movimento"]=="Despesa"].copy()
+    st.subheader("📊 Média de Despesas + Comparativo Atual")
+
+    # ==========================================
+    # 🔹 FILTRO EXCLUSIVO DA ABA (MÊS/ANO)
+    # ==========================================
+
+    mes_ano_tab2 = st.multiselect(
+        "Selecione os Mês/Ano para cálculo da média",
+        sorted(df["mes_ano"].dropna().unique()),
+        key="mes_ano_media"
+    )
+
+    # ==========================================
+    # 🔹 DESPESA ATUAL (RESPEITA FILTROS SUPERIORES)
+    # ==========================================
+
+    df_despesa_topo = df_filtrado[
+        df_filtrado["movimento"] == "Despesa"
+    ].copy()
+
+    despesa_atual_group = df_despesa_topo.groupby(
+        ['razao','grupo','filial','tipo_conta','pcontas']
+    )['valor'].sum().reset_index()
+
+    despesa_atual_group.rename(
+        columns={"valor": "Despesa_Atual"},
+        inplace=True
+    )
+
+    # ==========================================
+    # 🔹 BASE PARA MÉDIA (IGNORA ANO/MÊS SUPERIOR)
+    # ==========================================
+
+    df_base_media = df.copy()
+
+    for sel, col in zip(
+        [razao_sel, grupo_sel, filial_sel, movimento_sel, tipo_conta_sel, pcontas_sel],
+        ["razao","grupo","filial","movimento","tipo_conta","pcontas"]
+    ):
+        if sel:
+            df_base_media = df_base_media[df_base_media[col].isin(sel)]
+
+    df_media_despesas = df_base_media[
+        df_base_media["movimento"] == "Despesa"
+    ].copy()
+
+    if mes_ano_tab2:
+        df_media_despesas = df_media_despesas[
+            df_media_despesas["mes_ano"].isin(mes_ano_tab2)
+        ]
 
     if not df_media_despesas.empty:
-        df_media = df_media_despesas.groupby(
+
+        agrupado = df_media_despesas.groupby(
             ['razao','grupo','filial','tipo_conta','pcontas']
-        )['valor'].mean().reset_index()
+        )
 
-        df_media.rename(columns={"valor":"Média Despesa"}, inplace=True)
-        df_media["Média Despesa"] = df_media["Média Despesa"].apply(formatar_real)
+        df_media = agrupado.agg(
+            Total_Despesa=('valor','sum'),
+            Qtd_Meses=('mes_ano','nunique')
+        ).reset_index()
 
-        st.data_editor(df_media, use_container_width=True, disabled=True)
+        df_media["Média_Mensal"] = (
+            df_media["Total_Despesa"] / df_media["Qtd_Meses"]
+        )
+
+        # ==========================================
+        # 🔹 JUNTAR DESPESA ATUAL
+        # ==========================================
+
+        df_final = df_media.merge(
+            despesa_atual_group,
+            on=['razao','grupo','filial','tipo_conta','pcontas'],
+            how="left"
+        )
+
+        df_final["Despesa_Atual"] = df_final["Despesa_Atual"].fillna(0)
+
+        # ==========================================
+        # 🔹 VARIAÇÃO BASEADA NO ATUAL vs MÉDIA
+        # ==========================================
+
+        df_final["Variação_%"] = 0
+
+        for i, row in df_final.iterrows():
+            media = row["Média_Mensal"]
+            atual = row["Despesa_Atual"]
+
+            if media != 0:
+                # Calcula diferença relativa considerando valor negativo das despesas
+                variacao = ((atual - media) / (media)) * 100
+            else:
+                variacao = 0
+
+            df_final.at[i, "Variação_%"] = variacao
+
+
+        def cor_variacao(v):
+            # Agora, quanto mais positivo o valor, melhor (menos despesa)
+            # Quanto mais negativo, pior (mais despesa)
+            if v > 0:  # aumento na despesa (menos negativo)
+                return "color: #dc2626; font-weight: bold;"  # vermelho
+            elif v < 0:  # redução na despesa (mais negativo)
+                return "color: #16a34a; font-weight: bold;"  # verde
+            elif v == 0:  # redução na despesa (menos negativo)
+                return "color: #e8a507; font-weight: bold;"  # verde
+
+            return ""
+
+
+        styled = df_final.style.map(
+            cor_variacao,
+            subset=["Variação_%"]
+        )
+
+        styled = styled.format({
+            "Total_Despesa": formatar_real,
+            "Média_Mensal": formatar_real,
+            "Despesa_Atual": formatar_real,
+            "Variação_%": "{:.2f}%"
+        })
+
+
+        st.dataframe(styled, use_container_width=True)
+
     else:
         st.warning("Nenhuma despesa encontrada para os filtros selecionados.")
-
-
 
 with tab3:
 
@@ -406,7 +517,6 @@ with tab3:
                     linhas.append(row_det)
 
     dre_df = pd.DataFrame(linhas)
-
     # ==============================
     # ESTILO DE COR
     # ==============================
