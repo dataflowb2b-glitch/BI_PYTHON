@@ -138,7 +138,6 @@ tab1, tab2, tab3 = st.tabs(["📊 Dashboard Principal","📈 Média de Despesas"
 
 with tab1:
 
-    with tab1:
     with st.expander("📅 Valores por Mês/Ano"):
         df_mes_ano = df_filtrado.groupby(['mes_ano', 'movimento'])['valor'].sum().unstack(fill_value=0)
         df_mes_ano['Receita'] = df_mes_ano.get('Receita', 0)
