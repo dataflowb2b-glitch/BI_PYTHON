@@ -202,9 +202,7 @@ with tab2:
     else:
         st.warning("Nenhuma despesa encontrada para os filtros selecionados.")
 
-from st_aggrid import AgGrid, GridOptionsBuilder
-from st_aggrid.shared import JsCode
-import pandas as pd
+
 
 with tab3:
 
