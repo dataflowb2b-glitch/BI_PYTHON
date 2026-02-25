@@ -80,9 +80,6 @@ header {{visibility: hidden;}}
 # ==============================
 
 
-
-
-
 # ==============================
 # FUNÇÕES
 # ==============================
@@ -111,8 +108,6 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-st.image("https://github.com/dataflowb2b-glitch/BI_PYTHON/blob/main/LOGO%20NOVA%20DAS%20NOVAS.jpeg", caption="Imagem da URL")
-st.title("📊 Dashboard Financeiro - CBR")
 
 # ==============================
 # BUSCAR DADOS
