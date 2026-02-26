@@ -149,29 +149,125 @@ ordem_meses = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho",
 # FILTROS
 # ==============================
 
+
 st.subheader("📋 Filtros")
 
-col_data1,col_data2 = st.columns(2)
-ano_sel = col_data1.multiselect("Ano", sorted(df["ano"].dropna().unique()), key="ano")
-mes_sel = col_data2.multiselect("Mês", sorted(df["nome_mes"].dropna().unique(), key=lambda x: ordem_meses.index(x)), key="mes")
+# 🔹 Filtros de data primeiro
+col_data1, col_data2 = st.columns(2)
 
-col_f1,col_f2,col_f3,col_f4,col_f5,col_f6 = st.columns(6)
-razao_sel = col_f1.multiselect("Razão", sorted(df["razao"].dropna().unique()), key="razao")
-grupo_sel = col_f2.multiselect("Grupo", sorted(df["grupo"].dropna().unique()), key="grupo")
-filial_sel = col_f3.multiselect("Filial", sorted(df["filial"].dropna().unique()), key="filial")
-movimento_sel = col_f4.multiselect("Movimento", sorted(df["movimento"].dropna().unique()), key="movimento")
-tipo_conta_sel = col_f5.multiselect("Tipo Conta", sorted(df["tipo_conta"].dropna().unique()), key="tipo_conta")
-pcontas_sel = col_f6.multiselect("PContas", sorted(df["pcontas"].dropna().unique()), key="pcontas")
+ano_sel = col_data1.multiselect(
+    "Ano",
+    sorted(df["ano"].dropna().unique()),
+    key="ano"
+)
 
-def limpar_filtros():
-    st.session_state.ano=[]
-    st.session_state.mes=[]
-    st.session_state.razao=[]
-    st.session_state.grupo=[]
-    st.session_state.filial=[]
-    st.session_state.tipo_conta=[]
-    st.session_state.pcontas=[]
-st.button("🔄 Limpar filtros", on_click=limpar_filtros)
+mes_sel = col_data2.multiselect(
+    "Mês",
+    sorted(df["nome_mes"].dropna().unique(), key=lambda x: ordem_meses.index(x)),
+    key="mes"
+)
+
+# ------------------------------
+# BASE COM FILTRO DE DATA
+# ------------------------------
+
+df_base = df.copy()
+
+if ano_sel:
+    df_base = df_base[df_base["ano"].isin(ano_sel)]
+
+if mes_sel:
+    df_base = df_base[df_base["nome_mes"].isin(mes_sel)]
+
+# ==============================
+# RAZÃO
+# ==============================
+
+col_f1, col_f2, col_f3, col_f4, col_f5, col_f6 = st.columns(6)
+
+razao_options = sorted(df_base["razao"].dropna().unique())
+
+razao_sel = col_f1.multiselect(
+    "Razão",
+    options=razao_options,
+    key="razao"
+)
+
+# 🔄 Se mudou Razão → limpar dependentes
+if "razao_old" not in st.session_state:
+    st.session_state.razao_old = []
+
+if st.session_state.razao_old != razao_sel:
+    st.session_state.grupo = []
+    st.session_state.filial = []
+    st.session_state.razao_old = razao_sel
+
+# ==============================
+# GRUPO (DEPENDENTE)
+# ==============================
+
+df_grupo = df_base.copy()
+
+if razao_sel:
+    df_grupo = df_grupo[df_grupo["razao"].isin(razao_sel)]
+
+grupo_options = sorted(df_grupo["grupo"].dropna().unique())
+
+grupo_sel = col_f2.multiselect(
+    "Grupo",
+    options=grupo_options,
+    key="grupo"
+)
+
+# 🔄 Se mudou Grupo → limpar filial
+if "grupo_old" not in st.session_state:
+    st.session_state.grupo_old = []
+
+if st.session_state.grupo_old != grupo_sel:
+    st.session_state.filial = []
+    st.session_state.grupo_old = grupo_sel
+
+# ==============================
+# FILIAL (DEPENDENTE)
+# ==============================
+
+df_filial = df_grupo.copy()
+
+if grupo_sel:
+    df_filial = df_filial[df_filial["grupo"].isin(grupo_sel)]
+
+filial_options = sorted(df_filial["filial"].dropna().unique())
+
+filial_sel = col_f3.multiselect(
+    "Filial",
+    options=filial_options,
+    key="filial"
+)
+
+# ==============================
+# DEMAIS FILTROS
+# ==============================
+
+movimento_sel = col_f4.multiselect(
+    "Movimento",
+    sorted(df_filial["movimento"].dropna().unique()),
+    key="movimento"
+)
+
+tipo_conta_sel = col_f5.multiselect(
+    "Tipo Conta",
+    sorted(df_filial["tipo_conta"].dropna().unique()),
+    key="tipo_conta"
+)
+
+pcontas_sel = col_f6.multiselect(
+    "PContas",
+    sorted(df_filial["pcontas"].dropna().unique()),
+    key="pcontas"
+)
+
+
+
 
 # ==============================
 # APLICAR FILTROS
