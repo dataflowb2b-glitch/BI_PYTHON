@@ -306,10 +306,9 @@ col3.markdown(f"""<div class="card"><div class="card-title">📊 Resultado</div>
 # TABS
 # ==============================
 
-tab1, tab2, tab3, tab4 = st.tabs(["📊 Dashboard Principal","📈 Média de Despesas","📊 DRE Mensal","📊 Matriz de Despesas (Grupo + Razão + Pcontas + Filial)"])
+tab1, tab2, tab3,tab4 = st.tabs(["📊 Dashboard Principal","📈 Média de Despesas","📊 DRE Mensal","📊 Matriz de Despesas (Grupo + Razão + Pcontas + Filial)"])
 
 with tab1:
-
     with st.expander("📅 Valores por Mês/Ano"):
         df_mes_ano = df_filtrado.groupby(['mes_ano', 'movimento'])['valor'].sum().unstack(fill_value=0)
         df_mes_ano['Receita'] = df_mes_ano.get('Receita', 0)
@@ -384,13 +383,20 @@ with tab1:
 
         st.dataframe(styled, use_container_width=True)
 
+
+# ==============================
+# COLUNA ANO_SEMANA
+# ==============================
+
+df["ano_semana"] = (
+    df["dt_lancamento"].dt.year.astype(str)
+    + "-S"
+    + df["dt_lancamento"].dt.isocalendar().week.astype(str).str.zfill(2)
+)
+
 with tab2:
 
-    st.subheader("📊 Média de Despesas + Comparativo Atual")
-
-    # ==========================================
-    # 🔹 FILTRO EXCLUSIVO DA ABA (MÊS/ANO)
-    # ==========================================
+    st.subheader("📊 Meta de Despesas + Comparativo Atual")
 
     mes_ano_tab2 = st.multiselect(
         "Selecione os Mês/Ano para cálculo da média",
@@ -398,9 +404,9 @@ with tab2:
         key="mes_ano_media"
     )
 
-    # ==========================================
-    # 🔹 DESPESA ATUAL (RESPEITA FILTROS SUPERIORES)
-    # ==========================================
+    # ==============================
+    # DESPESA ATUAL
+    # ==============================
 
     df_despesa_topo = df_filtrado[
         df_filtrado["movimento"] == "Despesa"
@@ -415,9 +421,9 @@ with tab2:
         inplace=True
     )
 
-    # ==========================================
-    # 🔹 BASE PARA MÉDIA (IGNORA ANO/MÊS SUPERIOR)
-    # ==========================================
+    # ==============================
+    # BASE MÉDIA
+    # ==============================
 
     df_base_media = df.copy()
 
@@ -448,13 +454,13 @@ with tab2:
             Qtd_Meses=('mes_ano','nunique')
         ).reset_index()
 
-        df_media["Média_Mensal"] = (
+        df_media["Meta_Despesa"] = (
             df_media["Total_Despesa"] / df_media["Qtd_Meses"]
         )
 
-        # ==========================================
-        # 🔹 JUNTAR DESPESA ATUAL
-        # ==========================================
+        # ==============================
+        # MERGE
+        # ==============================
 
         df_final = df_media.merge(
             despesa_atual_group,
@@ -464,52 +470,106 @@ with tab2:
 
         df_final["Despesa_Atual"] = df_final["Despesa_Atual"].fillna(0)
 
-        # ==========================================
-        # 🔹 VARIAÇÃO BASEADA NO ATUAL vs MÉDIA
-        # ==========================================
+        # ==============================
+        # DIFERENÇA E VARIAÇÃO
+        # ==============================
 
-        df_final["Variação_%"] = 0
-
-        for i, row in df_final.iterrows():
-            media = row["Média_Mensal"]
-            atual = row["Despesa_Atual"]
-
-            if media != 0:
-                # Calcula diferença relativa considerando valor negativo das despesas
-                variacao = ((atual - media) / (media)) * 100
-            else:
-                variacao = 0
-
-            df_final.at[i, "Variação_%"] = variacao
-
-
-        def cor_variacao(v):
-            # Agora, quanto mais positivo o valor, melhor (menos despesa)
-            # Quanto mais negativo, pior (mais despesa)
-            if v > 0:  # aumento na despesa (menos negativo)
-                return "color: #dc2626; font-weight: bold;"  # vermelho
-            elif v < 0:  # redução na despesa (mais negativo)
-                return "color: #16a34a; font-weight: bold;"  # verde
-            elif v == 0:  # redução na despesa (menos negativo)
-                return "color: #e8a507; font-weight: bold;"  # verde
-
-            return ""
-
-
-        styled = df_final.style.map(
-            cor_variacao,
-            subset=["Variação_%"]
+        df_final["Diferenca_R$"] = (
+            df_final["Despesa_Atual"] - df_final["Meta_Despesa"]
         )
 
-        styled = styled.format({
-            "Total_Despesa": formatar_real,
-            "Média_Mensal": formatar_real,
+        df_final["Variação_%"] = df_final.apply(
+            lambda row: (
+                ((row["Despesa_Atual"] - row["Meta_Despesa"]) / row["Meta_Despesa"]) * 100
+                if row["Meta_Despesa"] != 0 else 0
+            ),
+            axis=1
+        )
+
+        df_exibir = df_final.drop(columns=["Total_Despesa", "Qtd_Meses"])
+
+        # ==============================
+        # LINHA TOTAL
+        # ==============================
+
+        total_meta = df_exibir["Meta_Despesa"].sum()
+        total_atual = df_exibir["Despesa_Atual"].sum()
+        total_diferenca = df_exibir["Diferenca_R$"].sum()
+
+        total_variacao = (
+            ((total_atual - total_meta) / total_meta) * 100
+            if total_meta != 0 else 0
+        )
+
+        # ==============================
+        # ESTILIZAÇÃO
+        # ==============================
+
+        def cor_variacao(v):
+            if v > 0:
+                return "color: #dc2626; font-weight: bold;"
+            elif v < 0:
+                return "color: #16a34a; font-weight: bold;"
+            elif v == 0:
+                return "color: #e8a507; font-weight: bold;"
+            return ""
+
+        def cor_diferenca(v):
+            if v > 0:
+                return "color: #dc2626; font-weight: bold;"
+            elif v < 0:
+                return "color: #16a34a; font-weight: bold;"
+            elif v == 0:
+                return "color: #e8a507; font-weight: bold;"
+            return ""
+
+        def destacar_total(row):
+            if row["razao"] == "TOTAL GERAL":
+                return ["font-weight: bold; background-color: #f3f4f6"] * len(row)
+            return [""] * len(row)
+
+        styled = df_exibir.style.map(
+            cor_variacao,
+            subset=["Variação_%"]
+        ).map(
+            cor_diferenca,
+            subset=["Diferenca_R$"]
+        ).format({
+            "Meta_Despesa": formatar_real,
             "Despesa_Atual": formatar_real,
+            "Diferenca_R$": formatar_real,
             "Variação_%": "{:.2f}%"
-        })
+        }).apply(
+            destacar_total,
+            axis=1
+        )
 
+        # ==========================================
+        # 🔹 RESUMO GERAL ACIMA DA TABELA
+        # ==========================================
 
-        st.dataframe(styled, use_container_width=True)
+        st.markdown("### 📌 Resumo Geral")
+
+        col1, col2, col3 = st.columns(3)
+
+        col1.metric(
+            "💰 Meta Total",
+            formatar_real(total_meta)
+        )
+
+        col2.metric(
+            "💳 Despesa Atual Total",
+            formatar_real(total_atual)
+        )
+
+        col3.metric(
+            "📊 Diferença Total",
+            formatar_real(total_diferenca),
+            f"{total_variacao:.2f}%"
+        )
+        # ==========================================
+
+        st.dataframe(styled, width="stretch")
 
     else:
         st.warning("Nenhuma despesa encontrada para os filtros selecionados.")
@@ -615,6 +675,7 @@ with tab3:
                     linhas.append(row_det)
 
     dre_df = pd.DataFrame(linhas)
+
     # ==============================
     # ESTILO DE COR
     # ==============================
@@ -670,6 +731,7 @@ with tab3:
         allow_unsafe_jscode=True,
         height=650
     )
+
 
 with tab4:
 
