@@ -4,6 +4,8 @@ from supabase import create_client
 from PIL import Image
 from st_aggrid import AgGrid, GridOptionsBuilder, JsCode
 from datetime import datetime
+from st_aggrid.shared import JsCode
+
 
 # ==============================
 # INICIO TITULO DA PAGINA
@@ -304,7 +306,7 @@ col3.markdown(f"""<div class="card"><div class="card-title">📊 Resultado</div>
 # TABS
 # ==============================
 
-tab1, tab2, tab3 = st.tabs(["📊 Dashboard Principal","📈 Média de Despesas","📊 DRE Mensal"])
+tab1, tab2, tab3, tab4 = st.tabs(["📊 Dashboard Principal","📈 Média de Despesas","📊 DRE Mensal","📊 Matriz de Despesas (Grupo + Razão + Pcontas + Filial)"])
 
 with tab1:
 
