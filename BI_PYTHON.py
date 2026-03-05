@@ -669,3 +669,255 @@ with tab3:
         height=650
     )
 
+with tab4:
+
+    st.subheader("📊 Matriz de Despesas (Grupo ➝ Razão ➝ Pcontas ➝ Filial)")
+
+    mes_ano_tab4 = st.multiselect(
+        "Selecione os Mês/Ano para cálculo da média",
+        sorted(df["mes_ano"].dropna().unique()),
+        key="mes_ano_media_tab4"
+    )
+
+    # ==============================
+    # DESPESA ATUAL
+    # ==============================
+
+    df_despesa_topo = df_filtrado[
+        df_filtrado["movimento"] == "Despesa"
+    ].copy()
+
+    despesa_atual_group = df_despesa_topo.groupby(
+        ['grupo','razao','pcontas','filial']
+    )['valor'].sum().reset_index()
+
+    despesa_atual_group.rename(
+        columns={"valor": "Despesa_Atual"},
+        inplace=True
+    )
+
+    # ==============================
+    # BASE PARA MÉDIA
+    # ==============================
+
+    df_base_media = df.copy()
+
+    for sel, col in zip(
+        [grupo_sel, razao_sel, pcontas_sel, filial_sel],
+        ["grupo","razao","pcontas","filial"]
+    ):
+        if sel:
+            df_base_media = df_base_media[df_base_media[col].isin(sel)]
+
+    df_media_despesas = df_base_media[
+        df_base_media["movimento"] == "Despesa"
+    ].copy()
+
+    if mes_ano_tab4:
+        df_media_despesas = df_media_despesas[
+            df_media_despesas["mes_ano"].isin(mes_ano_tab4)
+        ]
+
+    if not df_media_despesas.empty:
+
+        agrupado = df_media_despesas.groupby(
+            ['grupo','razao','pcontas','filial']
+        )
+
+        df_media = agrupado.agg(
+            Total_Despesa=('valor','sum'),
+            Qtd_Meses=('mes_ano','nunique')
+        ).reset_index()
+
+        df_media["Meta_Despesa"] = (
+            df_media["Total_Despesa"] / df_media["Qtd_Meses"]
+        )
+
+        # ==============================
+        # MERGE
+        # ==============================
+
+        df_final = df_media.merge(
+            despesa_atual_group,
+            on=['grupo','razao','pcontas','filial'],
+            how="left"
+        )
+
+        df_final["Despesa_Atual"] = df_final["Despesa_Atual"].fillna(0)
+
+        # ==============================
+        # DIFERENÇA E VARIAÇÃO
+        # ==============================
+
+        df_final["Diferenca_R$"] = (
+            df_final["Despesa_Atual"] - df_final["Meta_Despesa"]
+        )
+
+        df_final["Variação_%"] = df_final.apply(
+            lambda row: (
+                ((row["Despesa_Atual"] - row["Meta_Despesa"]) / row["Meta_Despesa"]) * 100
+                if row["Meta_Despesa"] != 0 else 0
+            ),
+            axis=1
+        )
+
+        # ==============================
+        # RESUMO EXECUTIVO (RESPEITA FILTROS)
+        # ==============================
+
+        df_resumo = df_final.copy()
+
+        # aplica filtros de cima
+        if grupo_sel:
+            df_resumo = df_resumo[df_resumo["grupo"].isin(grupo_sel)]
+
+        if razao_sel:
+            df_resumo = df_resumo[df_resumo["razao"].isin(razao_sel)]
+
+        if filial_sel:
+            df_resumo = df_resumo[df_resumo["filial"].isin(filial_sel)]
+
+        if pcontas_sel:
+            df_resumo = df_resumo[df_resumo["pcontas"].isin(pcontas_sel)]
+
+        if movimento_sel:
+            df_resumo = df_resumo[df_resumo["movimento"].isin(movimento_sel)]
+
+        if tipo_conta_sel:
+            df_resumo = df_resumo[df_resumo["tipo_conta"].isin(tipo_conta_sel)]
+
+        # ==============================
+        # CÁLCULOS
+        # ==============================
+
+        total_meta = df_resumo["Meta_Despesa"].sum()
+        total_atual = df_resumo["Despesa_Atual"].sum()
+        total_diferenca = df_resumo["Diferenca_R$"].sum()
+
+        total_variacao = (
+            ((total_atual - total_meta) / total_meta) * 100
+            if total_meta != 0 else 0
+        )
+
+        # ==============================
+        # EXIBIÇÃO
+        # ==============================
+
+        st.markdown("### 📌 Resumo Geral")
+
+        col1, col2, col3 = st.columns(3)
+
+        col1.metric("💰 Meta Total", formatar_real(total_meta))
+        col2.metric("💳 Despesa Atual Total", formatar_real(total_atual))
+        col3.metric(
+            "📊 Diferença Total",
+            formatar_real(total_diferenca),
+            f"{total_variacao:.2f}%"
+        )
+
+        # ==============================
+        # MATRIZ HIERÁRQUICA
+        # ==============================
+
+        linhas = []
+
+        for grupo, df_grupo in df_final.groupby("grupo"):
+
+            meta_grupo = df_grupo["Meta_Despesa"].sum()
+            atual_grupo = df_grupo["Despesa_Atual"].sum()
+            dif_grupo = df_grupo["Diferenca_R$"].sum()
+            var_grupo = ((atual_grupo - meta_grupo) / meta_grupo * 100) if meta_grupo != 0 else 0
+
+            linhas.append({
+                "Meta_Despesa": meta_grupo,
+                "Despesa_Atual": atual_grupo,
+                "Diferenca_R$": dif_grupo,
+                "Variação_%": var_grupo,
+                "path": [grupo]
+            })
+
+            for pcontas, df_pc in df_grupo.groupby("pcontas"):
+
+                    meta_pc = df_pc["Meta_Despesa"].sum()
+                    atual_pc = df_pc["Despesa_Atual"].sum()
+                    dif_pc = df_pc["Diferenca_R$"].sum()
+                    var_pc = ((atual_pc - meta_pc) / meta_pc * 100) if meta_pc != 0 else 0
+
+                    linhas.append({
+                        "Meta_Despesa": meta_pc,
+                        "Despesa_Atual": atual_pc,
+                        "Diferenca_R$": dif_pc,
+                        "Variação_%": var_pc,
+                        "path": [grupo, pcontas]
+                    })
+
+                    for filial, df_filial in df_pc.groupby("filial"):
+
+                        meta_filial = df_filial["Meta_Despesa"].sum()
+                        atual_filial = df_filial["Despesa_Atual"].sum()
+                        dif_filial = df_filial["Diferenca_R$"].sum()
+                        var_filial = ((atual_filial - meta_filial) / meta_filial * 100) if meta_filial != 0 else 0
+
+                        linhas.append({
+                            "Meta_Despesa": meta_filial,
+                            "Despesa_Atual": atual_filial,
+                            "Diferenca_R$": dif_filial,
+                            "Variação_%": var_filial,
+                            "path": [grupo, pcontas, filial]
+                        })
+
+        matriz_df = pd.DataFrame(linhas)
+
+        # ==============================
+        # AGGRID CONFIG
+        # ==============================
+
+        cell_style = JsCode("""
+        function(params) {
+            if (params.value > 0) {
+                return { color: "#dc2626", fontWeight: "bold" };
+            }
+            if (params.value < 0) {
+                return { color: "#16a34a", fontWeight: "bold" };
+            }
+            return {};
+        }
+        """)
+
+        gb = GridOptionsBuilder.from_dataframe(matriz_df)
+
+        gb.configure_column("path", hide=True)
+
+        for col in ["Meta_Despesa", "Despesa_Atual", "Diferenca_R$", "Variação_%"]:
+            gb.configure_column(
+                col,
+                type=["numericColumn"],
+                valueFormatter=(
+                    "x.toLocaleString('pt-BR', {style:'currency', currency:'BRL'})"
+                    if col != "Variação_%"
+                    else "x.toFixed(2) + '%'"
+                ),
+                cellStyle=cell_style
+            )
+
+        gb.configure_grid_options(
+            treeData=True,
+            animateRows=True,
+            groupDefaultExpanded=0,
+            getDataPath=JsCode("function(data) { return data.path; }")
+        )
+
+        gridOptions = gb.build()
+
+        AgGrid(
+            matriz_df,
+            gridOptions=gridOptions,
+            enable_enterprise_modules=True,
+            fit_columns_on_grid_load=True,
+            theme="streamlit",
+            allow_unsafe_jscode=True,
+            height=650
+        )
+
+    else:
+        st.warning("Nenhuma despesa encontrada para os filtros selecionados.")
