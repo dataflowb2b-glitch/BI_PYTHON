@@ -306,7 +306,7 @@ col3.markdown(f"""<div class="card"><div class="card-title">📊 Resultado</div>
 # TABS
 # ==============================
 
-tab1, tab2, tab3,tab4 = st.tabs(["📊 Dashboard Principal","📈 Média de Despesas","📊 DRE Mensal","📊 Matriz de Despesas (Grupo + Razão + Pcontas + Filial)"])
+tab1, tab2, tab3,tab4, tab5 = st.tabs(["📊 Dashboard Principal","📈 Média de Despesas","📊 DRE Mensal","📊 Matriz de Despesas (Grupo + Razão + Pcontas + Filial)","💰 Meta de Faturamento"])
 
 with tab1:
     with st.expander("📅 Valores por Mês/Ano"):
@@ -985,3 +985,247 @@ with tab4:
 
     else:
         st.warning("Nenhuma despesa encontrada para os filtros selecionados.")
+
+
+with tab5:
+
+    st.subheader("💰 Matriz de Faturamento (Grupo ➝ Pcontas ➝ Filial)")
+
+    mes_ano_tab5 = st.multiselect(
+        "Selecione os Mês/Ano para cálculo da média de faturamento",
+        sorted(df["mes_ano"].dropna().unique()),
+        key="mes_ano_media_tab5"
+    )
+
+    # ==============================
+    # FATURAMENTO ATUAL
+    # ==============================
+
+    df_receita_atual = df_filtrado[
+        df_filtrado["movimento"] == "Receita"
+    ].copy()
+
+    faturamento_atual_group = df_receita_atual.groupby(
+        ['grupo','pcontas','filial']
+    )['valor'].sum().reset_index()
+
+    faturamento_atual_group.rename(
+        columns={"valor": "Faturamento_Atual"},
+        inplace=True
+    )
+
+    # ==============================
+    # BASE PARA MÉDIA
+    # ==============================
+
+    df_base_media = df.copy()
+
+    for sel, col in zip(
+        [grupo_sel, pcontas_sel, filial_sel],
+        ["grupo","pcontas","filial"]
+    ):
+        if sel:
+            df_base_media = df_base_media[df_base_media[col].isin(sel)]
+
+    df_media_receita = df_base_media[
+        df_base_media["movimento"] == "Receita"
+    ].copy()
+
+    if mes_ano_tab5:
+        df_media_receita = df_media_receita[
+            df_media_receita["mes_ano"].isin(mes_ano_tab5)
+        ]
+
+    if not df_media_receita.empty:
+
+        agrupado = df_media_receita.groupby(
+            ['grupo','pcontas','filial']
+        )
+
+        df_media = agrupado.agg(
+            Total_Receita=('valor','sum'),
+            Qtd_Meses=('mes_ano','nunique')
+        ).reset_index()
+
+        df_media["Meta_Faturamento"] = (
+            df_media["Total_Receita"] / df_media["Qtd_Meses"]
+        )
+
+        # ==============================
+        # MERGE
+        # ==============================
+
+        df_final = df_media.merge(
+            faturamento_atual_group,
+            on=['grupo','pcontas','filial'],
+            how="left"
+        )
+
+        df_final["Faturamento_Atual"] = df_final["Faturamento_Atual"].fillna(0)
+
+        # ==============================
+        # DIFERENÇA
+        # ==============================
+
+        df_final["Diferenca_R$"] = (
+            df_final["Faturamento_Atual"] - df_final["Meta_Faturamento"]
+        )
+
+        # ==============================
+        # VARIAÇÃO %
+        # ==============================
+
+        df_final["Variação_%"] = df_final.apply(
+            lambda row: (
+                ((row["Faturamento_Atual"] - row["Meta_Faturamento"]) / row["Meta_Faturamento"]) * 100
+                if row["Meta_Faturamento"] != 0 else 0
+            ),
+            axis=1
+        )
+
+        # ==============================
+        # ATINGIMENTO DA META
+        # ==============================
+
+        df_final["Atingimento_%"] = df_final.apply(
+            lambda row: (
+                (row["Faturamento_Atual"] / row["Meta_Faturamento"]) * 100
+                if row["Meta_Faturamento"] != 0 else 0
+            ),
+            axis=1
+        )
+
+        # ==============================
+        # RESUMO EXECUTIVO
+        # ==============================
+
+        total_meta = df_final["Meta_Faturamento"].sum()
+        total_atual = df_final["Faturamento_Atual"].sum()
+        total_diferenca = df_final["Diferenca_R$"].sum()
+
+        total_variacao = (
+            ((total_atual - total_meta) / total_meta) * 100
+            if total_meta != 0 else 0
+        )
+
+        st.markdown("### 📌 Resumo Geral")
+
+        col1, col2, col3 = st.columns(3)
+
+        col1.metric("💰 Meta Total", formatar_real(total_meta))
+        col2.metric("📈 Faturamento Atual", formatar_real(total_atual))
+        col3.metric(
+            "📊 Diferença",
+            formatar_real(total_diferenca),
+            f"{total_variacao:.2f}%"
+        )
+
+        # ==============================
+        # MATRIZ HIERÁRQUICA
+        # ==============================
+
+        linhas = []
+
+        for grupo, df_grupo in df_final.groupby("grupo"):
+
+            meta_grupo = df_grupo["Meta_Faturamento"].sum()
+            atual_grupo = df_grupo["Faturamento_Atual"].sum()
+            dif_grupo = df_grupo["Diferenca_R$"].sum()
+            var_grupo = ((atual_grupo - meta_grupo) / meta_grupo * 100) if meta_grupo != 0 else 0
+
+            linhas.append({
+                "Meta_Faturamento": meta_grupo,
+                "Faturamento_Atual": atual_grupo,
+                "Diferenca_R$": dif_grupo,
+                "Variação_%": var_grupo,
+                "path": [grupo]
+            })
+
+            for pcontas, df_pc in df_grupo.groupby("pcontas"):
+
+                meta_pc = df_pc["Meta_Faturamento"].sum()
+                atual_pc = df_pc["Faturamento_Atual"].sum()
+                dif_pc = df_pc["Diferenca_R$"].sum()
+                var_pc = ((atual_pc - meta_pc) / meta_pc * 100) if meta_pc != 0 else 0
+
+                linhas.append({
+                    "Meta_Faturamento": meta_pc,
+                    "Faturamento_Atual": atual_pc,
+                    "Diferenca_R$": dif_pc,
+                    "Variação_%": var_pc,
+                    "path": [grupo, pcontas]
+                })
+
+                for filial, df_filial in df_pc.groupby("filial"):
+
+                    meta_filial = df_filial["Meta_Faturamento"].sum()
+                    atual_filial = df_filial["Faturamento_Atual"].sum()
+                    dif_filial = df_filial["Diferenca_R$"].sum()
+                    var_filial = ((atual_filial - meta_filial) / meta_filial * 100) if meta_filial != 0 else 0
+
+                    linhas.append({
+                        "Meta_Faturamento": meta_filial,
+                        "Faturamento_Atual": atual_filial,
+                        "Diferenca_R$": dif_filial,
+                        "Variação_%": var_filial,
+                        "path": [grupo, pcontas, filial]
+                    })
+
+        matriz_df = pd.DataFrame(linhas)
+
+        # ==============================
+        # AGGRID
+        # ==============================
+
+        cell_style = JsCode("""
+        function(params) {
+
+            if (params.value > 0) {
+                return { color: "#16a34a", fontWeight: "bold" };
+            }
+
+            if (params.value < 0) {
+                return { color: "#dc2626", fontWeight: "bold" };
+            }
+
+            return {};
+        }
+        """)
+
+        gb = GridOptionsBuilder.from_dataframe(matriz_df)
+
+        gb.configure_column("path", hide=True)
+
+        for col in ["Meta_Faturamento", "Faturamento_Atual", "Diferenca_R$", "Variação_%"]:
+            gb.configure_column(
+                col,
+                type=["numericColumn"],
+                valueFormatter=(
+                    "x.toLocaleString('pt-BR', {style:'currency', currency:'BRL'})"
+                    if col != "Variação_%"
+                    else "x.toFixed(2) + '%'"
+                ),
+                cellStyle=cell_style
+            )
+
+        gb.configure_grid_options(
+            treeData=True,
+            animateRows=True,
+            groupDefaultExpanded=0,
+            getDataPath=JsCode("function(data) { return data.path; }")
+        )
+
+        gridOptions = gb.build()
+
+        AgGrid(
+            matriz_df,
+            gridOptions=gridOptions,
+            enable_enterprise_modules=True,
+            fit_columns_on_grid_load=True,
+            theme="streamlit",
+            allow_unsafe_jscode=True,
+            height=650
+        )
+
+    else:
+        st.warning("Nenhuma receita encontrada para os filtros selecionados.")
