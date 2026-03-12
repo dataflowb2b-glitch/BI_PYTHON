@@ -115,34 +115,34 @@ st.markdown("""
 # BUSCAR DADOS
 # ==============================
 
-response = supabase.table("vw_contas_movimento").select("*").execute()
+response = supabase.table("vw_fcontas_geral_py").select("*").execute()
 df = pd.DataFrame(response.data)
 
-if "fornecedor" in df.columns:
-    df = df.rename(columns={"fornecedor": "filial"})
+if "filial" in df.columns:
+    df = df.rename(columns={"filial": "filial"})
 
 # ==============================
 # TRATAR VALORES NULOS
 # ==============================
 
 df["razao"] = df.get("razao","Não informado")
-df["grupo"] = df["grupo"].fillna("Não informado")
 df["filial"] = df["filial"].fillna("Não informado")
 df["pcontas"] = df["pcontas"].fillna("Não informado")
-df["tipo_conta"] = df["tipo_conta"].fillna("Não informado")
+df["status"] = df["status"].fillna("Não informado")
 
-df['dt_lancamento'] = pd.to_datetime(df['dt_lancamento'], errors='coerce')
+df['dt_vencimento'] = pd.to_datetime(df['dt_vencimento'], errors='coerce')
 df['valor'] = pd.to_numeric(df['valor'], errors='coerce')
-df = df.dropna(subset=['dt_lancamento','valor'])
+df = df.dropna(subset=['dt_vencimento','valor'])
 df['movimento'] = df['movimento'].str.strip().str.capitalize()
+
 
 meses = {1:"Janeiro",2:"Fevereiro",3:"Março",4:"Abril",5:"Maio",6:"Junho",
          7:"Julho",8:"Agosto",9:"Setembro",10:"Outubro",11:"Novembro",12:"Dezembro"}
 
-df['ano'] = df['dt_lancamento'].dt.year
-df['mes'] = df['dt_lancamento'].dt.month
+df['ano'] = df['dt_vencimento'].dt.year
+df['mes'] = df['dt_vencimento'].dt.month
 df['nome_mes'] = df['mes'].map(meses)
-df['mes_ano'] = df['dt_lancamento'].dt.to_period('M').astype(str)
+df['mes_ano'] = df['dt_vencimento'].dt.to_period('M').astype(str)
 
 ordem_meses = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho",
                "Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"]
@@ -150,7 +150,9 @@ ordem_meses = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho",
 # ==============================
 # FILTROS
 # ==============================
-
+# ==============================
+# FILTROS CORPORATIVOS EM CASCATA
+# ==============================
 
 st.subheader("📋 Filtros")
 
@@ -195,52 +197,18 @@ razao_sel = col_f1.multiselect(
     key="razao"
 )
 
-# 🔄 Se mudou Razão → limpar dependentes
-if "razao_old" not in st.session_state:
-    st.session_state.razao_old = []
-
-if st.session_state.razao_old != razao_sel:
-    st.session_state.grupo = []
-    st.session_state.filial = []
-    st.session_state.razao_old = razao_sel
-
 # ==============================
-# GRUPO (DEPENDENTE)
+# FILIAL (DEPENDENTE DA RAZÃO)
 # ==============================
 
-df_grupo = df_base.copy()
+df_filial = df_base.copy()
 
 if razao_sel:
-    df_grupo = df_grupo[df_grupo["razao"].isin(razao_sel)]
-
-grupo_options = sorted(df_grupo["grupo"].dropna().unique())
-
-grupo_sel = col_f2.multiselect(
-    "Grupo",
-    options=grupo_options,
-    key="grupo"
-)
-
-# 🔄 Se mudou Grupo → limpar filial
-if "grupo_old" not in st.session_state:
-    st.session_state.grupo_old = []
-
-if st.session_state.grupo_old != grupo_sel:
-    st.session_state.filial = []
-    st.session_state.grupo_old = grupo_sel
-
-# ==============================
-# FILIAL (DEPENDENTE)
-# ==============================
-
-df_filial = df_grupo.copy()
-
-if grupo_sel:
-    df_filial = df_filial[df_filial["grupo"].isin(grupo_sel)]
+    df_filial = df_filial[df_filial["razao"].isin(razao_sel)]
 
 filial_options = sorted(df_filial["filial"].dropna().unique())
 
-filial_sel = col_f3.multiselect(
+filial_sel = col_f2.multiselect(
     "Filial",
     options=filial_options,
     key="filial"
@@ -250,26 +218,22 @@ filial_sel = col_f3.multiselect(
 # DEMAIS FILTROS
 # ==============================
 
-movimento_sel = col_f4.multiselect(
+movimento_sel = col_f3.multiselect(
     "Movimento",
     sorted(df_filial["movimento"].dropna().unique()),
     key="movimento"
 )
 
-tipo_conta_sel = col_f5.multiselect(
-    "Tipo Conta",
-    sorted(df_filial["tipo_conta"].dropna().unique()),
-    key="tipo_conta"
+status_sel = col_f4.multiselect(
+    "Status",
+    sorted(df_filial["status"].dropna().unique()),
+    key="status"
 )
-
-pcontas_sel = col_f6.multiselect(
+pcontas_sel = col_f5.multiselect(
     "PContas",
     sorted(df_filial["pcontas"].dropna().unique()),
     key="pcontas"
 )
-
-
-
 
 # ==============================
 # APLICAR FILTROS
@@ -277,9 +241,9 @@ pcontas_sel = col_f6.multiselect(
 
 df_filtrado = df.copy()
 for key, sel, col in zip(
-    ["ano","mes","razao","grupo","filial","movimento","tipo_conta","pcontas"],
-    [ano_sel,mes_sel,razao_sel,grupo_sel,filial_sel,movimento_sel,tipo_conta_sel,pcontas_sel],
-    ["ano","nome_mes","razao","grupo","filial","movimento","tipo_conta","pcontas"]
+    ["ano","mes","razao","filial","movimento","status","pcontas"],
+    [ano_sel,mes_sel,razao_sel,filial_sel,movimento_sel,status_sel,pcontas_sel],
+    ["ano","nome_mes","razao","filial","movimento","status","pcontas"]
 ):
     if sel:
         df_filtrado = df_filtrado[df_filtrado[col].isin(sel)]
@@ -291,7 +255,7 @@ for key, sel, col in zip(
 totais_filtrados = df_filtrado.groupby('movimento')['valor'].sum()
 receita_filtrada = totais_filtrados.get('Receita',0)
 despesa_filtrada = totais_filtrados.get('Despesa',0)
-resultado_filtrado = receita_filtrada + despesa_filtrada
+resultado_filtrado = receita_filtrada - despesa_filtrada
 
 col1,col2,col3 = st.columns(3)
 
@@ -306,14 +270,14 @@ col3.markdown(f"""<div class="card"><div class="card-title">📊 Resultado</div>
 # TABS
 # ==============================
 
-tab1, tab2, tab3,tab4, tab5 = st.tabs(["📊 Dashboard Principal","📈 Média de Despesas","📊 DRE Mensal","📊 Matriz de Despesas (Grupo + Razão + Pcontas + Filial)","💰 Meta de Faturamento"])
+tab1, tab2, tab3,tab4,tab5 = st.tabs(["📊 Dashboard Principal","📈 Média de Despesas","📊 DRE Mensal","📊 Matriz de Despesas (Grupo + Razão + Pcontas + Filial)","💰 Meta de Faturamento"])
 
 with tab1:
     with st.expander("📅 Valores por Mês/Ano"):
         df_mes_ano = df_filtrado.groupby(['mes_ano', 'movimento'])['valor'].sum().unstack(fill_value=0)
         df_mes_ano['Receita'] = df_mes_ano.get('Receita', 0)
         df_mes_ano['Despesa'] = df_mes_ano.get('Despesa', 0)
-        df_mes_ano['Resultado'] = df_mes_ano['Receita'] + df_mes_ano['Despesa']
+        df_mes_ano['Resultado'] = df_mes_ano['Receita'] - df_mes_ano['Despesa']
 
 
         def colorir_valores(val, coluna):
@@ -327,7 +291,6 @@ with tab1:
 
 
         df_estilizado = df_mes_ano.style
-
         for col in df_mes_ano.columns:
             df_estilizado = df_estilizado.map(
                 lambda v, c=col: colorir_valores(v, c),
@@ -341,7 +304,7 @@ with tab1:
 
     with st.expander("📂 Visão Detalhada"):
         df_detalhe = df_filtrado.groupby(
-            ['razao', 'grupo', 'filial', 'ano', 'nome_mes', 'tipo_conta', 'pcontas', 'movimento'],
+            ['razao', 'filial', 'status','ano', 'nome_mes', 'pcontas', 'movimento'],
             dropna=False
         )['valor'].sum().unstack(fill_value=0).reset_index()
 
@@ -351,7 +314,7 @@ with tab1:
                 df_detalhe[col] = 0
 
         # Criar Resultado (opcional, mas recomendo manter padrão)
-        df_detalhe["Resultado"] = df_detalhe["Receita"] + df_detalhe["Despesa"]
+        df_detalhe["Resultado"] = df_detalhe["Receita"] - df_detalhe["Despesa"]
 
 
         def cor_texto(valor, coluna):
@@ -389,9 +352,9 @@ with tab1:
 # ==============================
 
 df["ano_semana"] = (
-    df["dt_lancamento"].dt.year.astype(str)
+    df["dt_vencimento"].dt.year.astype(str)
     + "-S"
-    + df["dt_lancamento"].dt.isocalendar().week.astype(str).str.zfill(2)
+    + df["dt_vencimento"].dt.isocalendar().week.astype(str).str.zfill(2)
 )
 
 with tab2:
@@ -413,7 +376,7 @@ with tab2:
     ].copy()
 
     despesa_atual_group = df_despesa_topo.groupby(
-        ['razao','grupo','filial','tipo_conta','pcontas']
+        ['razao','filial','status','pcontas']
     )['valor'].sum().reset_index()
 
     despesa_atual_group.rename(
@@ -428,8 +391,8 @@ with tab2:
     df_base_media = df.copy()
 
     for sel, col in zip(
-        [razao_sel, grupo_sel, filial_sel, movimento_sel, tipo_conta_sel, pcontas_sel],
-        ["razao","grupo","filial","movimento","tipo_conta","pcontas"]
+        [razao_sel, filial_sel, movimento_sel, pcontas_sel],
+        ["razao","filial","movimento","status","pcontas"]
     ):
         if sel:
             df_base_media = df_base_media[df_base_media[col].isin(sel)]
@@ -446,7 +409,7 @@ with tab2:
     if not df_media_despesas.empty:
 
         agrupado = df_media_despesas.groupby(
-            ['razao','grupo','filial','tipo_conta','pcontas']
+            ['razao','filial','status','movimento','pcontas']
         )
 
         df_media = agrupado.agg(
@@ -464,8 +427,8 @@ with tab2:
 
         df_final = df_media.merge(
             despesa_atual_group,
-            on=['razao','grupo','filial','tipo_conta','pcontas'],
-            how="left"
+            on=['razao','filial','status','pcontas'],
+            how="outer"
         )
 
         df_final["Despesa_Atual"] = df_final["Despesa_Atual"].fillna(0)
@@ -590,8 +553,8 @@ with tab3:
 
     df_pivot = pd.pivot_table(
         df_filtrado,
-        index=["razao", "grupo", "filial", "movimento"],
-        columns="nome_mes",
+        index=["razao", "filial", "status", "movimento"],
+        columns=["ano", "nome_mes"],
         values="valor",
         aggfunc="sum",
         fill_value=0
@@ -616,12 +579,23 @@ with tab3:
         "Setembro", "Outubro", "Novembro", "Dezembro"
     ]
 
-    meses_existentes = [m for m in ordem_meses if m in df_pivot.columns]
+    anos_existentes = sorted(df_filtrado["ano"].dropna().unique())
 
-    df_pivot = df_pivot[meses_existentes]
+    colunas_ordenadas = []
+
+    for ano in anos_existentes:
+        for mes in ordem_meses:
+            if (ano, mes) in df_pivot.columns:
+                colunas_ordenadas.append((ano, mes))
+
+    df_pivot = df_pivot[colunas_ordenadas]
+
+    # criar nome das colunas
+    df_pivot.columns = [f"{ano}_{mes}" for ano, mes in df_pivot.columns]
+
+    meses_existentes = df_pivot.columns.tolist()
 
     linhas = []
-
     # ==============================
     # HIERARQUIA
     # ==============================
@@ -629,8 +603,7 @@ with tab3:
     for razao, df_razao in df_pivot.groupby(level="razao"):
 
         receita_razao = df_razao[df_razao.index.get_level_values("movimento") == "Receita"].sum()
-        despesa_razao = df_razao[df_razao.index.get_level_values("movimento") == "Despesa"].sum()
-        resultado_razao = receita_razao + despesa_razao
+        resultado_razao = receita_razao
 
         row_razao = {mes: float(resultado_razao.get(mes, 0)) for mes in meses_existentes}
         row_razao["TOTAL"] = float(resultado_razao.sum())
@@ -638,41 +611,29 @@ with tab3:
         linhas.append(row_razao)
 
         # ----------------------------
+        # FILIAL
+        # ----------------------------
 
-        for grupo, df_grupo in df_razao.groupby(level="grupo"):
+        for filial, df_filial in df_razao.groupby(level="filial"):
 
-            receita_grupo = df_grupo[df_grupo.index.get_level_values("movimento") == "Receita"].sum()
-            despesa_grupo = df_grupo[df_grupo.index.get_level_values("movimento") == "Despesa"].sum()
-            resultado_grupo = receita_grupo + despesa_grupo
+            receita = df_filial[df_filial.index.get_level_values("movimento") == "Receita"].sum()
+            resultado = receita
 
-            row_grupo = {mes: float(resultado_grupo.get(mes, 0)) for mes in meses_existentes}
-            row_grupo["TOTAL"] = float(resultado_grupo.sum())
-            row_grupo["path"] = [razao, grupo]
-            linhas.append(row_grupo)
+            row_filial = {mes: float(resultado.get(mes, 0)) for mes in meses_existentes}
+            row_filial["TOTAL"] = float(resultado.sum())
+            row_filial["path"] = [razao, filial]
+            linhas.append(row_filial)
 
             # ----------------------------
+            # MOVIMENTO
+            # ----------------------------
 
-            for filial, df_filial in df_grupo.groupby(level="filial"):
+            for movimento, df_mov in df_filial.groupby(level="movimento"):
 
-                receita = df_filial[df_filial.index.get_level_values("movimento") == "Receita"].sum()
-                despesa = df_filial[df_filial.index.get_level_values("movimento") == "Despesa"].sum()
-                resultado = receita + despesa
-
-                row_filial = {mes: float(resultado.get(mes, 0)) for mes in meses_existentes}
-                row_filial["TOTAL"] = float(resultado.sum())
-                row_filial["path"] = [razao, grupo, filial]
-                linhas.append(row_filial)
-
-                # ----------------------------
-                # DETALHAMENTO
-                # ----------------------------
-
-                for movimento, df_mov in df_filial.groupby(level="movimento"):
-
-                    row_det = {mes: float(df_mov[mes].sum()) for mes in meses_existentes}
-                    row_det["TOTAL"] = float(df_mov.sum().sum())
-                    row_det["path"] = [razao, grupo, filial, movimento]
-                    linhas.append(row_det)
+                row_det = {mes: float(df_mov[mes].sum()) for mes in meses_existentes}
+                row_det["TOTAL"] = float(df_mov.sum().sum())
+                row_det["path"] = [razao, filial, movimento]
+                linhas.append(row_det)
 
     dre_df = pd.DataFrame(linhas)
 
@@ -735,7 +696,7 @@ with tab3:
 
 with tab4:
 
-    st.subheader("📊 Matriz de Despesas (Grupo ➝ Razão ➝ Pcontas ➝ Filial)")
+    st.subheader("📊 Matriz de Despesas (Pcontas ➝ Razão ➝ Filial)")
 
     mes_ano_tab4 = st.multiselect(
         "Selecione os Mês/Ano para cálculo da média",
@@ -744,247 +705,215 @@ with tab4:
     )
 
     # ==============================
-    # DESPESA ATUAL
+    # BASE META (IGNORA FILTRO DE MÊS)
     # ==============================
 
-    df_despesa_topo = df_filtrado[
-        df_filtrado["movimento"] == "Despesa"
-    ].copy()
+    df_meta_base = df.copy()
 
-    despesa_atual_group = df_despesa_topo.groupby(
-        ['grupo','razao','pcontas','filial']
-    )['valor'].sum().reset_index()
+    if razao_sel:
+        df_meta_base = df_meta_base[df_meta_base["razao"].isin(razao_sel)]
 
-    despesa_atual_group.rename(
-        columns={"valor": "Despesa_Atual"},
-        inplace=True
+    if filial_sel:
+        df_meta_base = df_meta_base[df_meta_base["filial"].isin(filial_sel)]
+
+    if status_sel:
+        df_meta_base = df_meta_base[df_meta_base["status"].isin(status_sel)]
+
+    if pcontas_sel:
+        df_meta_base = df_meta_base[df_meta_base["pcontas"].isin(pcontas_sel)]
+
+    df_meta_base = df_meta_base[df_meta_base["movimento"] == "Despesa"]
+
+    # ==============================
+    # FILTRO MESES MÉDIA
+    # ==============================
+
+    if mes_ano_tab4:
+        df_meta_base = df_meta_base[
+            df_meta_base["mes_ano"].isin(mes_ano_tab4)
+        ]
+
+    # ==============================
+    # CALCULO META
+    # ==============================
+
+    df_meta = (
+        df_meta_base
+        .groupby(["pcontas","razao","filial"])
+        .agg(
+            Total_Despesa=("valor","sum"),
+            Meses=("mes_ano","nunique")
+        )
+        .reset_index()
+    )
+
+    df_meta["Meta_Despesa"] = (
+        df_meta["Total_Despesa"] / df_meta["Meses"]
     )
 
     # ==============================
-    # BASE PARA MÉDIA
+    # DESPESA ATUAL (MESMO CARD)
     # ==============================
 
-    df_base_media = df.copy()
+    df_atual = df_filtrado.copy()
 
-    for sel, col in zip(
-        [grupo_sel, razao_sel, pcontas_sel, filial_sel],
-        ["grupo","razao","pcontas","filial"]
-    ):
-        if sel:
-            df_base_media = df_base_media[df_base_media[col].isin(sel)]
-
-    df_media_despesas = df_base_media[
-        df_base_media["movimento"] == "Despesa"
-    ].copy()
-
-    if mes_ano_tab4:
-        df_media_despesas = df_media_despesas[
-            df_media_despesas["mes_ano"].isin(mes_ano_tab4)
+    df_atual = df_atual[
+        df_atual["movimento"] == "Despesa"
         ]
 
-    if not df_media_despesas.empty:
+    df_atual = (
+        df_atual
+        .groupby(["pcontas", "razao", "filial"], as_index=False)
+        ["valor"]
+        .sum()
+    )
 
-        agrupado = df_media_despesas.groupby(
-            ['grupo','razao','pcontas','filial']
-        )
+    df_atual.rename(
+        columns={"valor": "Despesa_Atual"},
+        inplace=True
+    )
+    # ==============================
+    # MERGE
+    # ==============================
 
-        df_media = agrupado.agg(
-            Total_Despesa=('valor','sum'),
-            Qtd_Meses=('mes_ano','nunique')
-        ).reset_index()
+    df_final = df_meta.merge(
+        df_atual,
+        on=["pcontas","razao","filial"],
+        how="outer"
+    )
 
-        df_media["Meta_Despesa"] = (
-            df_media["Total_Despesa"] / df_media["Qtd_Meses"]
-        )
+    df_final["Despesa_Atual"] = df_final["Despesa_Atual"].fillna(0)
+    df_final["Meta_Despesa"] = df_final["Meta_Despesa"].fillna(0)
+    df_final["Despesa_Atual"] = df_final["Despesa_Atual"].fillna(0)
 
-        # ==============================
-        # MERGE
-        # ==============================
+    # ==============================
+    # DIFERENÇA
+    # ==============================
 
-        df_final = df_media.merge(
-            despesa_atual_group,
-            on=['grupo','razao','pcontas','filial'],
-            how="left"
-        )
+    df_final["Diferenca_R$"] = (
+        df_final["Despesa_Atual"] - df_final["Meta_Despesa"]
+    )
 
-        df_final["Despesa_Atual"] = df_final["Despesa_Atual"].fillna(0)
+    df_final["Variação_%"] = df_final.apply(
+        lambda row:
+        ((row["Despesa_Atual"] - row["Meta_Despesa"]) / row["Meta_Despesa"] * 100)
+        if row["Meta_Despesa"] != 0 else 0,
+        axis=1
+    )
 
-        # ==============================
-        # DIFERENÇA E VARIAÇÃO
-        # ==============================
+    # ==============================
+    # RESUMO
+    # ==============================
 
-        df_final["Diferenca_R$"] = (
-            df_final["Despesa_Atual"] - df_final["Meta_Despesa"]
-        )
+    total_meta = df_final["Meta_Despesa"].sum()
+    total_atual = df_final["Despesa_Atual"].sum()
+    total_dif = df_final["Diferenca_R$"].sum()
 
-        df_final["Variação_%"] = df_final.apply(
-            lambda row: (
-                ((row["Despesa_Atual"] - row["Meta_Despesa"]) / row["Meta_Despesa"]) * 100
-                if row["Meta_Despesa"] != 0 else 0
-            ),
-            axis=1
-        )
+    variacao_total = (
+        ((total_atual-total_meta)/total_meta)*100
+        if total_meta != 0 else 0
+    )
 
-        # ==============================
-        # RESUMO EXECUTIVO (RESPEITA FILTROS)
-        # ==============================
+    st.markdown("### 📌 Resumo Geral")
 
-        df_resumo = df_final.copy()
+    c1,c2,c3 = st.columns(3)
 
-        # aplica filtros de cima
-        if grupo_sel:
-            df_resumo = df_resumo[df_resumo["grupo"].isin(grupo_sel)]
+    c1.metric("💰 Meta Total", formatar_real(total_meta))
+    c2.metric("💳 Despesa Atual", formatar_real(total_atual))
+    c3.metric(
+        "📊 Diferença",
+        formatar_real(total_dif),
+        f"{variacao_total:.2f}%"
+    )
 
-        if razao_sel:
-            df_resumo = df_resumo[df_resumo["razao"].isin(razao_sel)]
+    # ==============================
+    # MATRIZ HIERÁRQUICA
+    # ==============================
 
-        if filial_sel:
-            df_resumo = df_resumo[df_resumo["filial"].isin(filial_sel)]
+    linhas = []
 
-        if pcontas_sel:
-            df_resumo = df_resumo[df_resumo["pcontas"].isin(pcontas_sel)]
+    for pcontas, df_pc in df_final.groupby("pcontas"):
 
-        if movimento_sel:
-            df_resumo = df_resumo[df_resumo["movimento"].isin(movimento_sel)]
+        linhas.append({
+            "Meta_Despesa": df_pc["Meta_Despesa"].sum(),
+            "Despesa_Atual": df_pc["Despesa_Atual"].sum(),
+            "Diferenca_R$": df_pc["Diferenca_R$"].sum(),
+            "Variação_%": df_pc["Variação_%"].mean(),
+            "path":[pcontas]
+        })
 
-        if tipo_conta_sel:
-            df_resumo = df_resumo[df_resumo["tipo_conta"].isin(tipo_conta_sel)]
-
-        # ==============================
-        # CÁLCULOS
-        # ==============================
-
-        total_meta = df_resumo["Meta_Despesa"].sum()
-        total_atual = df_resumo["Despesa_Atual"].sum()
-        total_diferenca = df_resumo["Diferenca_R$"].sum()
-
-        total_variacao = (
-            ((total_atual - total_meta) / total_meta) * 100
-            if total_meta != 0 else 0
-        )
-
-        # ==============================
-        # EXIBIÇÃO
-        # ==============================
-
-        st.markdown("### 📌 Resumo Geral")
-
-        col1, col2, col3 = st.columns(3)
-
-        col1.metric("💰 Meta Total", formatar_real(total_meta))
-        col2.metric("💳 Despesa Atual Total", formatar_real(total_atual))
-        col3.metric(
-            "📊 Diferença Total",
-            formatar_real(total_diferenca),
-            f"{total_variacao:.2f}%"
-        )
-
-        # ==============================
-        # MATRIZ HIERÁRQUICA
-        # ==============================
-
-        linhas = []
-
-        for grupo, df_grupo in df_final.groupby("grupo"):
-
-            meta_grupo = df_grupo["Meta_Despesa"].sum()
-            atual_grupo = df_grupo["Despesa_Atual"].sum()
-            dif_grupo = df_grupo["Diferenca_R$"].sum()
-            var_grupo = ((atual_grupo - meta_grupo) / meta_grupo * 100) if meta_grupo != 0 else 0
+        for razao, df_r in df_pc.groupby("razao"):
 
             linhas.append({
-                "Meta_Despesa": meta_grupo,
-                "Despesa_Atual": atual_grupo,
-                "Diferenca_R$": dif_grupo,
-                "Variação_%": var_grupo,
-                "path": [grupo]
+                "Meta_Despesa": df_r["Meta_Despesa"].sum(),
+                "Despesa_Atual": df_r["Despesa_Atual"].sum(),
+                "Diferenca_R$": df_r["Diferenca_R$"].sum(),
+                "Variação_%": df_r["Variação_%"].mean(),
+                "path":[pcontas,razao]
             })
 
-            for pcontas, df_pc in df_grupo.groupby("pcontas"):
+            for filial, df_f in df_r.groupby("filial"):
 
-                    meta_pc = df_pc["Meta_Despesa"].sum()
-                    atual_pc = df_pc["Despesa_Atual"].sum()
-                    dif_pc = df_pc["Diferenca_R$"].sum()
-                    var_pc = ((atual_pc - meta_pc) / meta_pc * 100) if meta_pc != 0 else 0
+                linhas.append({
+                    "Meta_Despesa": df_f["Meta_Despesa"].sum(),
+                    "Despesa_Atual": df_f["Despesa_Atual"].sum(),
+                    "Diferenca_R$": df_f["Diferenca_R$"].sum(),
+                    "Variação_%": df_f["Variação_%"].mean(),
+                    "path":[pcontas,razao,filial]
+                })
 
-                    linhas.append({
-                        "Meta_Despesa": meta_pc,
-                        "Despesa_Atual": atual_pc,
-                        "Diferenca_R$": dif_pc,
-                        "Variação_%": var_pc,
-                        "path": [grupo, pcontas]
-                    })
+    matriz_df = pd.DataFrame(linhas)
 
-                    for filial, df_filial in df_pc.groupby("filial"):
+    # ==============================
+    # AGGRID
+    # ==============================
 
-                        meta_filial = df_filial["Meta_Despesa"].sum()
-                        atual_filial = df_filial["Despesa_Atual"].sum()
-                        dif_filial = df_filial["Diferenca_R$"].sum()
-                        var_filial = ((atual_filial - meta_filial) / meta_filial * 100) if meta_filial != 0 else 0
-
-                        linhas.append({
-                            "Meta_Despesa": meta_filial,
-                            "Despesa_Atual": atual_filial,
-                            "Diferenca_R$": dif_filial,
-                            "Variação_%": var_filial,
-                            "path": [grupo, pcontas, filial]
-                        })
-
-        matriz_df = pd.DataFrame(linhas)
-
-        # ==============================
-        # AGGRID CONFIG
-        # ==============================
-
-        cell_style = JsCode("""
-        function(params) {
-            if (params.value > 0) {
-                return { color: "#dc2626", fontWeight: "bold" };
-            }
-            if (params.value < 0) {
-                return { color: "#16a34a", fontWeight: "bold" };
-            }
-            return {};
+    cell_style = JsCode("""
+    function(params) {
+        if (params.value > 0) {
+            return {color: '#dc2626', fontWeight:'bold'};
         }
-        """)
+        if (params.value < 0) {
+            return {color: '#16a34a', fontWeight:'bold'};
+        }
+        return {};
+    }
+    """)
 
-        gb = GridOptionsBuilder.from_dataframe(matriz_df)
+    gb = GridOptionsBuilder.from_dataframe(matriz_df)
 
-        gb.configure_column("path", hide=True)
+    gb.configure_column("path", hide=True)
 
-        for col in ["Meta_Despesa", "Despesa_Atual", "Diferenca_R$", "Variação_%"]:
-            gb.configure_column(
-                col,
-                type=["numericColumn"],
-                valueFormatter=(
-                    "x.toLocaleString('pt-BR', {style:'currency', currency:'BRL'})"
-                    if col != "Variação_%"
-                    else "x.toFixed(2) + '%'"
-                ),
-                cellStyle=cell_style
-            )
+    for col in ["Meta_Despesa","Despesa_Atual","Diferenca_R$","Variação_%"]:
 
-        gb.configure_grid_options(
-            treeData=True,
-            animateRows=True,
-            groupDefaultExpanded=0,
-            getDataPath=JsCode("function(data) { return data.path; }")
+        gb.configure_column(
+            col,
+            type=["numericColumn"],
+            valueFormatter=(
+                "x.toLocaleString('pt-BR',{style:'currency',currency:'BRL'})"
+                if col!="Variação_%"
+                else "x.toFixed(2)+'%'"
+            ),
+            cellStyle=cell_style
         )
 
-        gridOptions = gb.build()
+    gb.configure_grid_options(
+        treeData=True,
+        animateRows=True,
+        groupDefaultExpanded=0,
+        getDataPath=JsCode("function(data){return data.path;}")
+    )
 
-        AgGrid(
-            matriz_df,
-            gridOptions=gridOptions,
-            enable_enterprise_modules=True,
-            fit_columns_on_grid_load=True,
-            theme="streamlit",
-            allow_unsafe_jscode=True,
-            height=650
-        )
+    AgGrid(
+        matriz_df,
+        gridOptions=gb.build(),
+        enable_enterprise_modules=True,
+        fit_columns_on_grid_load=True,
+        theme="streamlit",
+        allow_unsafe_jscode=True,
+        height=650
+    )
 
-    else:
-        st.warning("Nenhuma despesa encontrada para os filtros selecionados.")
 
 
 with tab5:
@@ -1006,7 +935,7 @@ with tab5:
     ].copy()
 
     faturamento_atual_group = df_receita_atual.groupby(
-        ['grupo','pcontas','filial']
+        ['pcontas','filial']
     )['valor'].sum().reset_index()
 
     faturamento_atual_group.rename(
@@ -1021,8 +950,8 @@ with tab5:
     df_base_media = df.copy()
 
     for sel, col in zip(
-        [grupo_sel, pcontas_sel, filial_sel],
-        ["grupo","pcontas","filial"]
+        [pcontas_sel, filial_sel],
+        ["pcontas","filial"]
     ):
         if sel:
             df_base_media = df_base_media[df_base_media[col].isin(sel)]
@@ -1039,7 +968,7 @@ with tab5:
     if not df_media_receita.empty:
 
         agrupado = df_media_receita.groupby(
-            ['grupo','pcontas','filial']
+            ['pcontas','filial']
         )
 
         df_media = agrupado.agg(
@@ -1057,10 +986,12 @@ with tab5:
 
         df_final = df_media.merge(
             faturamento_atual_group,
-            on=['grupo','pcontas','filial'],
-            how="left"
+            on=['pcontas','filial'],
+            how="outer"
         )
 
+        df_final["Faturamento_Atual"] = df_final["Faturamento_Atual"].fillna(0)
+        df_final["Meta_Faturamento"] = df_final["Meta_Faturamento"].fillna(0)
         df_final["Faturamento_Atual"] = df_final["Faturamento_Atual"].fillna(0)
 
         # ==============================
@@ -1126,22 +1057,7 @@ with tab5:
 
         linhas = []
 
-        for grupo, df_grupo in df_final.groupby("grupo"):
-
-            meta_grupo = df_grupo["Meta_Faturamento"].sum()
-            atual_grupo = df_grupo["Faturamento_Atual"].sum()
-            dif_grupo = df_grupo["Diferenca_R$"].sum()
-            var_grupo = ((atual_grupo - meta_grupo) / meta_grupo * 100) if meta_grupo != 0 else 0
-
-            linhas.append({
-                "Meta_Faturamento": meta_grupo,
-                "Faturamento_Atual": atual_grupo,
-                "Diferenca_R$": dif_grupo,
-                "Variação_%": var_grupo,
-                "path": [grupo]
-            })
-
-            for pcontas, df_pc in df_grupo.groupby("pcontas"):
+        for pcontas, df_pc in df_final.groupby("pcontas"):
 
                 meta_pc = df_pc["Meta_Faturamento"].sum()
                 atual_pc = df_pc["Faturamento_Atual"].sum()
@@ -1153,7 +1069,7 @@ with tab5:
                     "Faturamento_Atual": atual_pc,
                     "Diferenca_R$": dif_pc,
                     "Variação_%": var_pc,
-                    "path": [grupo, pcontas]
+                    "path": [pcontas]
                 })
 
                 for filial, df_filial in df_pc.groupby("filial"):
@@ -1168,7 +1084,7 @@ with tab5:
                         "Faturamento_Atual": atual_filial,
                         "Diferenca_R$": dif_filial,
                         "Variação_%": var_filial,
-                        "path": [grupo, pcontas, filial]
+                        "path": [pcontas, filial]
                     })
 
         matriz_df = pd.DataFrame(linhas)
