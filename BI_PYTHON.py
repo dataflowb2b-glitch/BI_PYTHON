@@ -693,7 +693,6 @@ with tab3:
         height=650
     )
 
-
 with tab4:
 
     st.subheader("📊 Matriz de Despesas (Pcontas ➝ Razão ➝ Filial)")
@@ -752,14 +751,14 @@ with tab4:
     )
 
     # ==============================
-    # DESPESA ATUAL (MESMO CARD)
+    # DESPESA ATUAL
     # ==============================
 
     df_atual = df_filtrado.copy()
 
     df_atual = df_atual[
         df_atual["movimento"] == "Despesa"
-        ]
+    ]
 
     df_atual = (
         df_atual
@@ -772,6 +771,18 @@ with tab4:
         columns={"valor": "Despesa_Atual"},
         inplace=True
     )
+
+    # ==============================
+    # STATUS DA DESPESA
+    # ==============================
+
+    df_status = (
+        df_filtrado[df_filtrado["movimento"] == "Despesa"]
+        .groupby(["pcontas","razao","filial"])["status"]
+        .first()
+        .reset_index()
+    )
+
     # ==============================
     # MERGE
     # ==============================
@@ -782,9 +793,14 @@ with tab4:
         how="outer"
     )
 
+    df_final = df_final.merge(
+        df_status,
+        on=["pcontas","razao","filial"],
+        how="left"
+    )
+
     df_final["Despesa_Atual"] = df_final["Despesa_Atual"].fillna(0)
     df_final["Meta_Despesa"] = df_final["Meta_Despesa"].fillna(0)
-    df_final["Despesa_Atual"] = df_final["Despesa_Atual"].fillna(0)
 
     # ==============================
     # DIFERENÇA
@@ -835,6 +851,7 @@ with tab4:
     for pcontas, df_pc in df_final.groupby("pcontas"):
 
         linhas.append({
+            "Status":"",
             "Meta_Despesa": df_pc["Meta_Despesa"].sum(),
             "Despesa_Atual": df_pc["Despesa_Atual"].sum(),
             "Diferenca_R$": df_pc["Diferenca_R$"].sum(),
@@ -845,6 +862,7 @@ with tab4:
         for razao, df_r in df_pc.groupby("razao"):
 
             linhas.append({
+                "Status":"",
                 "Meta_Despesa": df_r["Meta_Despesa"].sum(),
                 "Despesa_Atual": df_r["Despesa_Atual"].sum(),
                 "Diferenca_R$": df_r["Diferenca_R$"].sum(),
@@ -855,6 +873,7 @@ with tab4:
             for filial, df_f in df_r.groupby("filial"):
 
                 linhas.append({
+                    "Status": df_f["status"].iloc[0] if not df_f.empty else "",
                     "Meta_Despesa": df_f["Meta_Despesa"].sum(),
                     "Despesa_Atual": df_f["Despesa_Atual"].sum(),
                     "Diferenca_R$": df_f["Diferenca_R$"].sum(),
@@ -880,9 +899,50 @@ with tab4:
     }
     """)
 
+    status_style = JsCode("""
+    function(params) {
+
+        if (params.value == 'Pago') {
+            return {
+                'backgroundColor': '#16a34a',
+                'color': 'white',
+                'fontWeight': 'bold',
+                'textAlign': 'center'
+            }
+        }
+
+        if (params.value == 'Vencido') {
+            return {
+                'backgroundColor': '#dc2626',
+                'color': 'white',
+                'fontWeight': 'bold',
+                'textAlign': 'center'
+            }
+        }
+
+        if (params.value == 'Em aberto') {
+            return {
+                'backgroundColor': '#fb923c',
+                'color': 'black',
+                'fontWeight': 'bold',
+                'textAlign': 'center'
+            }
+        }
+
+        return {}
+    }
+    """)
+
     gb = GridOptionsBuilder.from_dataframe(matriz_df)
 
     gb.configure_column("path", hide=True)
+
+    gb.configure_column(
+        "Status",
+        header_name="Status",
+        width=120,
+        cellStyle=status_style
+    )
 
     for col in ["Meta_Despesa","Despesa_Atual","Diferenca_R$","Variação_%"]:
 
@@ -913,7 +973,6 @@ with tab4:
         allow_unsafe_jscode=True,
         height=650
     )
-
 
 
 with tab5:
