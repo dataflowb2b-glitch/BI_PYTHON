@@ -121,8 +121,9 @@ df = pd.DataFrame(response.data)
 if "filial" in df.columns:
     df = df.rename(columns={"filial": "filial"})
 
-# 🚫 Ocultar empresa 7
+# 🚫 Ocultar empresa 7 e status=cancelado
 df = df[df["id_empresa"] != 7]
+df = df[df["status"]!="Cancelado"]
 
 # ==============================
 # TRATAR VALORES NULOS
